@@ -438,6 +438,12 @@ defmodule Quokka.Style.ModuleDirectives do
           {:skip, zipper, lifts}
         end
 
+      {{directive, _, _}, _} = zipper, lifts  when directive in [:use, :import] ->
+        #IO.inspect("Starting")
+        #new_zipper = zipper |> Zipper.down() |> Zipper.rightmost() |> Zipper.down() |> Zipper.down()
+        #IO.inspect(new_zipper)
+        {:skip, zipper |> Zipper.down() |> Zipper.rightmost() |> IO.inspect(label: "zipper"), lifts}
+
       zipper, lifts ->
         {:cont, zipper, lifts}
     end)
