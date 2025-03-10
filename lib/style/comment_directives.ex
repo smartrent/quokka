@@ -27,11 +27,7 @@ defmodule Quokka.Style.CommentDirectives do
       |> Enum.filter(&(&1.text == "# quokka:sort"))
       |> Enum.map(& &1.line)
       |> Enum.reduce({zipper, ctx.comments}, fn line, {zipper, comments} ->
-        found =
-          Zipper.find(zipper, fn node ->
-            node_line = Style.meta(node)[:line] || -1
-            node_line >= line
-          end)
+        found = Zipper.find(zipper, &(line + 1 == Style.meta(&1)[:line]))
 
         if found do
           {sorted, comments} = found |> Zipper.node() |> sort(comments)
@@ -43,7 +39,7 @@ defmodule Quokka.Style.CommentDirectives do
 
     zipper = apply_autosort(zipper, ctx)
 
-    {:halt, zipper, %{ctx | comments: comments}}
+    {:cont, zipper, %{ctx | comments: comments}}
   end
 
   defp apply_autosort(zipper, ctx) do
@@ -82,6 +78,8 @@ defmodule Quokka.Style.CommentDirectives do
 
   defp get_node_type(node) do
     case node do
+      {schema, _, [_, [{{:__block__, _, [:do]}, _}]]} when schema in [:schema, :typed_schema] -> :schema
+      {:embedded_schema, _, [[{{:__block__, _, [:do]}, _}]]} -> :schema
       {:%{}, _, _} -> :map
       {:%, _, [_, {:%{}, _, _}]} -> :map
       {:defstruct, _, _} -> :defstruct
@@ -160,6 +158,56 @@ defmodule Quokka.Style.CommentDirectives do
   defp sort({:@, m, [{a, am, [assignment]}]}, comments) do
     {assignment, comments} = sort(assignment, comments)
     {{:@, m, [{a, am, [assignment]}]}, comments}
+  end
+
+  defp sort({schema_type, meta, [table_name, [{{:__block__, _, [:do]}, {:__block__, block_meta, fields}}]]}, comments)
+       when schema_type in [:schema, :typed_schema, :embedded_schema] do
+    field_type_order = Quokka.Config.autosort_schema_order()
+
+    grouped_fields =
+      fields
+      |> Enum.group_by(fn
+        {field_type, _, _}
+        when field_type in [
+               :belongs_to,
+               :embeds_many,
+               :embeds_one,
+               :has_many,
+               :has_one,
+               :many_to_many,
+               :field
+             ] ->
+          field_type
+
+        other ->
+          other
+      end)
+
+    sorted_groups =
+      field_type_order
+      |> Enum.map(fn type ->
+        grouped_fields |> Map.get(type, []) |> Enum.sort_by(&Macro.to_string/1)
+      end)
+      |> Enum.reject(&(&1 == []))
+
+    other_fields =
+      grouped_fields
+      |> Map.drop(field_type_order)
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.sort_by(&Macro.to_string/1)
+
+    sorted_fields =
+      sorted_groups
+      |> Enum.map(&Style.reset_newlines/1)
+      |> Enum.reduce(fn group, acc ->
+        acc ++ Style.reset_newlines(group)
+      end)
+      |> Kernel.++(other_fields)
+
+    {sorted_fields, comments} = Style.order_line_meta_and_comments(sorted_fields, comments, meta[:line])
+
+    {{schema_type, meta, [table_name, [{{:__block__, [], [:do]}, {:__block__, block_meta, sorted_fields}}]]}, comments}
   end
 
   defp sort({key, value}, comments) do
