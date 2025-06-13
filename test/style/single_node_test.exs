@@ -83,6 +83,37 @@ defmodule Quokka.Style.SingleNodeTest do
     end
   end
 
+  describe "checking empty enums" do
+    test "length(enum) == 0 => Enum.empty?(enum)" do
+      assert_style("length(foo) == 0", "Enum.empty?(foo)")
+      assert_style("0 == length(foo)", "Enum.empty?(foo)")
+      assert_style("foo |> bar() |> length() === 0", "foo |> bar() |> Enum.empty?()")
+      assert_style("0 == foo |> bar() |> length()", "foo |> bar() |> Enum.empty?()")
+    end
+
+    test "Enum.count(enum) == 0 => Enum.empty?(enum)" do
+      assert_style("Enum.count(foo) == 0", "Enum.empty?(foo)")
+      assert_style("0 == Enum.count(foo)", "Enum.empty?(foo)")
+      assert_style("foo |> bar() |> Enum.count() === 0", "foo |> bar() |> Enum.empty?()")
+      assert_style("0 == foo |> bar() |> Enum.count()", "foo |> bar() |> Enum.empty?()")
+    end
+
+    test "length(enum) > 0 => not Enum.empty?(enum)" do
+      assert_style("length(foo) > 0", "not Enum.empty?(foo)")
+      assert_style("0 < length(foo)", "not Enum.empty?(foo)")
+    end
+
+    test "Enum.count(enum) > 0 => not Enum.empty?(enum)" do
+      assert_style("Enum.count(foo) > 0", "not Enum.empty?(foo)")
+      assert_style("0 < Enum.count(foo)", "not Enum.empty?(foo)")
+    end
+
+    test "does not monkey with other variants of length or count functions" do
+      assert_style("MyModule.length(foo) == 0", "MyModule.length(foo) == 0")
+      assert_style("MyModule.Enum.count(foo) == 0", "MyModule.Enum.count(foo) == 0")
+    end
+  end
+
   describe "Timex.now/0,1" do
     test "Timex.now/0 => DateTime.utc_now/0" do
       assert_style("Timex.now()", "DateTime.utc_now()")

@@ -24,6 +24,7 @@ defmodule Quokka.Style.SingleNode do
   * Credo.Check.Refactor.CondStatements
   * Credo.Check.Refactor.RedundantWithClauseResult
   * Credo.Check.Refactor.WithClauses
+  * Credo.Check.Warning.ExpensiveEmptyEnumCheck
   """
 
   @behaviour Quokka.Style
@@ -224,6 +225,64 @@ defmodule Quokka.Style.SingleNode do
   # `Enum.reverse(foo) ++ bar` => `Enum.reverse(foo, bar)`
   defp style({:++, _, [{{:., _, [{_, _, [:Enum]}, :reverse]} = reverse, r_meta, [lhs]}, rhs]}),
     do: {reverse, r_meta, [lhs, rhs]}
+
+  @literal_zero_pattern quote do: {:__block__, _, [0]}
+  @enum_count_pattern quote do: {{:., var!(m), [{_, _, [:Enum]}, :count]}, _, [var!(enum)]}
+  @length_pattern quote do: {:length, var!(m), [var!(enum)]}
+
+  for {lhs, rhs} <- [
+        # Enum.count(enum) == 0 => Enum.empty?(enum)
+        {@enum_count_pattern, @literal_zero_pattern},
+        # 0 == Enum.count(enum) => Enum.empty?(enum)
+        {@literal_zero_pattern, @enum_count_pattern},
+        # length(enum) == 0 => Enum.empty?(enum)
+        {@length_pattern, @literal_zero_pattern},
+        # 0 == length(enum) => Enum.empty?(enum)
+        {@literal_zero_pattern, @length_pattern}
+      ] do
+    defp style({op, _, [unquote(lhs), unquote(rhs)]} = node) when op in [:==, :===] do
+      if Quokka.Config.inefficient_function_rewrites?(),
+        do: {{:., m, [{:__aliases__, m, [:Enum]}, :empty?]}, m, [enum]},
+        else: node
+    end
+  end
+
+  @pipe_to_length_pattern quote do: {:|>, var!(pm), [var!(lhs), {:length, var!(m), []}]}
+  @pipe_to_count_pattern quote do: {:|>, var!(pm), [var!(lhs), {{:., var!(m), [{_, _, [:Enum]}, :count]}, _, []}]}
+
+  for {lhs, rhs} <- [
+        # foo |> bar() |> length() == 0 => foo |> bar() |> Enum.empty?()
+        {@pipe_to_length_pattern, @literal_zero_pattern},
+        # 0 == foo |> bar() |> length() => foo |> bar() |> Enum.empty?()
+        {@literal_zero_pattern, @pipe_to_length_pattern},
+        # foo |> bar() |> Enum.count() == 0 => foo |> bar() |> Enum.empty?()
+        {@pipe_to_count_pattern, @literal_zero_pattern},
+        # 0 == foo |> bar() |> Enum.count() => foo |> bar() |> Enum.empty?()
+        {@literal_zero_pattern, @pipe_to_count_pattern}
+      ] do
+    defp style({op, _, [unquote(lhs), unquote(rhs)]} = node) when op in [:==, :===] do
+      if Quokka.Config.inefficient_function_rewrites?(),
+        do: {:|>, pm, [lhs, {{:., m, [{:__aliases__, m, [:Enum]}, :empty?]}, m, []}]},
+        else: node
+    end
+  end
+
+  for {lhs, rhs, op} <- [
+        # Enum.count(enum) > 0 => not Enum.empty?(enum)
+        {@enum_count_pattern, @literal_zero_pattern, :>},
+        # 0 < Enum.count(enum) => not Enum.empty?(enum)
+        {@literal_zero_pattern, @enum_count_pattern, :<},
+        # length(enum) > 0 => not Enum.empty?(enum)
+        {@length_pattern, @literal_zero_pattern, :>},
+        # 0 < length(enum) => not Enum.empty?(enum)
+        {@literal_zero_pattern, @length_pattern, :<}
+      ] do
+    defp style({unquote(op), _, [unquote(lhs), unquote(rhs)]} = node) do
+      if Quokka.Config.inefficient_function_rewrites?(),
+        do: {:not, m, [{{:., m, [{:__aliases__, m, [:Enum]}, :empty?]}, m, [enum]}]},
+        else: node
+    end
+  end
 
   # ARROW REWRITES
   # `with`, `for` left arrow - if only we could write something this trivial for `->`!

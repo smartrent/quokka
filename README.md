@@ -170,6 +170,13 @@ the check can be configured further for fine tuning.
 | [`.UnlessWithElse`](https://hexdocs.pm/credo/Credo.Check.Refactor.UnlessWithElse.html)                       | Simplifies unless with else             | [Control Flow Macros](docs/control_flow_macros.md#if-and-unless)      |              |
 | [`.WithClauses`](https://hexdocs.pm/credo/Credo.Check.Refactor.WithClauses.html)                             | Optimizes with clauses                  | [Control Flow Macros](docs/control_flow_macros.md#with)               |              |
 
+### Credo.Check.Warning
+
+
+| Credo Check                                                                                                  | Rewrite Description                             | Documentation                                                         | Configurable |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------- | ------------ |
+| [`.ExpensiveEmptyEnumCheck`](https://hexdocs.pm/credo/Credo.Check.Warning.ExpensiveEmptyEnumCheck.html)      | Rewrites slow checks of enum emptiness          | [Single Node](docs/single_node.md#empty-enum-checks)                  |              |
+
 <!-- tabs-close -->
 
 ## License
